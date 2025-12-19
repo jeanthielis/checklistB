@@ -2,76 +2,235 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conferência de Checklist</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Conferência Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; }
+        :root {
+            --primary: #2563eb;
+            --success: #10b981;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --text-main: #1f2937;
+            --text-sec: #6b7280;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         
-        /* Telas (Estados) */
-        .screen { display: none; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background: var(--bg); 
+            /* Fix para iOS Safari (altura dinâmica) */
+            height: 100vh;
+            height: 100dvh; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden;
+        }
+
+        /* Header Fixo */
+        header {
+            background: var(--card);
+            padding: 15px 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            flex-shrink: 0;
+        }
+        header h1 { margin: 0; font-size: 1.2rem; color: var(--text-main); font-weight: 700; }
+        .btn-history {
+            background: none; border: none; color: var(--primary); font-weight: 600; cursor: pointer; font-size: 0.9rem;
+        }
+
+        /* Container Principal */
+        main { flex: 1; position: relative; overflow-y: auto; padding: 20px; -webkit-overflow-scrolling: touch; }
+
+        /* Telas */
+        .screen { 
+            display: none; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100%; 
+            animation: fadeIn 0.3s ease-out;
+        }
         .active { display: flex; }
 
-        /* Estilos Gerais */
-        h2 { color: #333; margin-bottom: 20px; }
-        p { color: #666; font-size: 1.1em; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Cartões */
+        .card {
+            background: var(--card);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h2 { color: var(--text-main); margin: 0 0 10px 0; font-size: 1.5rem; }
+        p { color: var(--text-sec); margin-bottom: 20px; line-height: 1.5; }
+
+        /* Scanner Customizado */
+        #scanner-wrapper {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            background: #000;
+            /* Garante altura mínima para o vídeo não colapsar */
+            min-height: 300px; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         
+        #reader { width: 100%; height: 100%; }
+        
+        /* Oculta elementos padrão feios da lib */
+        #reader__dashboard_section_csr button { display: none !important; } 
+
+        /* Moldura de Foco */
+        .scan-overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 70%; padding-bottom: 70%; /* Quadrado responsivo */
+            border: 2px solid rgba(255,255,255,0.7);
+            border-radius: 12px;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+            z-index: 10;
+            pointer-events: none;
+        }
+        .scan-label {
+            position: absolute; bottom: 20px; left: 0; right: 0;
+            text-align: center; color: white; font-weight: 600; font-size: 1.1rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            z-index: 20;
+        }
+
         /* Botões */
-        .btn-action { background: #007bff; color: white; padding: 15px 30px; border-radius: 50px; font-weight: bold; cursor: pointer; display: inline-block; margin-top: 20px; border:none; text-decoration: none;}
+        .btn-action {
+            background: var(--primary);
+            color: white;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            border: none;
+            width: 100%;
+            cursor: pointer;
+            transition: transform 0.1s;
+            margin-top: 15px;
+        }
+        .btn-action:active { transform: scale(0.98); }
+        .btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
 
-        /* Área da Câmera */
-        #reader { width: 100%; max-width: 500px; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
-        .status-bar { background: #333; color: #fff; width: 100%; padding: 15px; text-align: center; font-size: 1.2em; font-weight: bold; position: fixed; top: 0; left: 0; z-index: 10; }
-        .current-target { color: #ffd700; } 
+        /* Relatório */
+        .report-row {
+            display: flex; justify-content: space-between; padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .report-row:last-child { border-bottom: none; }
+        .lbl { font-size: 0.85rem; color: var(--text-sec); }
+        .val { font-weight: 600; color: var(--text-main); word-break: break-all; text-align: right; }
 
-        /* Tela de Sucesso */
-        #screen-success { background-color: #2ecc71; color: white; }
-        #screen-success h1 { font-size: 3em; margin: 0; }
-        .report-card { background: rgba(255,255,255,0.2); padding: 20px; border-radius: 10px; margin-top: 20px; text-align: left; width: 100%; max-width: 400px; }
-        .report-item { margin: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; }
-        .report-label { font-size: 0.8em; opacity: 0.8; }
-        .report-value { font-size: 1.2em; font-weight: bold; }
-        
-        .error-msg { color: red; background: #fee; padding: 10px; border-radius: 5px; display: none; }
+        /* Histórico Modal */
+        #history-view {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg); z-index: 200; padding: 20px;
+            overflow-y: auto; display: none;
+        }
+        .history-item {
+            background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-left: 4px solid var(--success);
+        }
+        .history-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.8rem; color: var(--text-sec); }
+        .badge { background: #d1fae5; color: #065f46; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;}
 
+        .check-icon {
+            width: 80px; height: 80px; background: var(--success); color: white;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 40px; margin: 0 auto 20px;
+            box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+        }
+
+        .error-box { background: #fee2e2; color: #b91c1c; padding: 15px; border-radius: 8px; font-size: 0.9rem; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
 
-    <div id="screen-loading" class="screen active">
-        <h2>Aguardando Dados...</h2>
-        <p>Acesse este sistema através do link gerado pelo aplicativo de inserção.</p>
-        <div id="error-box" class="error-msg"></div>
-    </div>
+    <header>
+        <h1>✔ CheckConfirm</h1>
+        <button class="btn-history" onclick="toggleHistory()">Histórico</button>
+    </header>
 
-    <div id="screen-scan" class="screen" style="justify-content: flex-start; padding-top: 60px;">
-        <div class="status-bar">
-            Procurando: <span id="target-name" class="current-target">...</span>
+    <main>
+        <div id="screen-loading" class="screen active">
+            <div class="card">
+                <div style="font-size: 3rem; margin-bottom: 15px;">🔍</div>
+                <h2>Aguardando Link</h2>
+                <p>Abra o link gerado pelo aplicativo de inserção para iniciar.</p>
+                <div id="error-msg" class="error-box"></div>
+                
+                <button id="btn-manual-start" class="btn-action" style="display:none;" onclick="tentarIniciarNovamente()">
+                    Iniciar Câmera
+                </button>
+            </div>
         </div>
-        <div id="reader"></div>
-        <p id="feedback-msg" style="margin-top: 20px;">Aponte a câmera para o código de barras.</p>
-    </div>
 
-    <div id="screen-success" class="screen">
-        <h1>✔</h1>
-        <h2>CONFERÊNCIA OK</h2>
-        <p>Todos os códigos foram validados.</p>
-        
-        <div class="report-card" id="report-content"></div>
-        
-        <button class="btn-action" style="background: white; color: #2ecc71; margin-top: 30px;" onclick="location.href=location.pathname">Nova Conferência</button>
-    </div>
+        <div id="screen-scan" class="screen">
+            <h2 style="margin-bottom: 15px; font-size: 1.2rem;">Escaneie o Código</h2>
+            
+            <div id="scanner-wrapper">
+                <div id="reader"></div>
+                <div class="scan-overlay"></div>
+                <div class="scan-label">Procurando: <span id="target-name" style="color: #ffd700">...</span></div>
+            </div>
+            
+            <p style="margin-top: 20px; font-size: 0.9rem;">Mantenha o código dentro do quadrado.</p>
+        </div>
+
+        <div id="screen-success" class="screen">
+            <div class="card">
+                <div class="check-icon">✓</div>
+                <h2>Conferido!</h2>
+                <p>Validação concluída com sucesso.</p>
+                
+                <div id="report-content" style="text-align: left; background: #f9fafb; padding: 15px; border-radius: 8px; margin-bottom: 20px;"></div>
+                
+                <button class="btn-action btn-outline" onclick="location.href=location.pathname">Nova Conferência</button>
+            </div>
+        </div>
+
+        <div id="history-view">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Histórico Local</h2>
+                <button onclick="toggleHistory()" style="background:none; border:none; font-size: 1.5rem;">✕</button>
+            </div>
+            <div id="history-list"></div>
+            <p id="empty-history" style="text-align: center; margin-top: 50px; display: none;">Nenhum registro encontrado.</p>
+            <button onclick="limparHistorico()" style="width:100%; color: red; background: none; border: none; padding: 20px; margin-top: 20px; opacity: 0.7;">Limpar Histórico</button>
+        </div>
+    </main>
 
     <script>
-        // Variáveis de Estado
+        // --- CONFIGURAÇÃO ---
         let dadosEsperados = null;
         let html5QrcodeScanner = null;
         const ordemChecagem = ['extra', 'comercial', 'popular'];
         let passoAtual = 0;
 
-        // Ao carregar a página, verifica se há dados na URL
+        // --- INICIALIZAÇÃO ---
         window.onload = function() {
             const params = new URLSearchParams(window.location.search);
             const dadosCriptografados = params.get('data');
@@ -81,66 +240,83 @@
             }
         };
 
-        // 1. Processar Dados da URL
         function processarDadosUrl(encryptedData) {
             try {
-                // Decodifica URL e Descriptografa
-                // Importante: decodeURIComponent é necessário pois a URL transforma caracteres como '+'
                 const decryptedBytes = CryptoJS.AES.decrypt(decodeURIComponent(encryptedData), 'chave-mestra-123');
                 const textoOriginal = decryptedBytes.toString(CryptoJS.enc.Utf8);
                 
-                if (!textoOriginal) throw new Error("Senha incorreta ou link corrompido");
+                if (!textoOriginal) throw new Error("Falha na descriptografia");
                 
                 dadosEsperados = JSON.parse(textoOriginal);
                 iniciarScanner();
 
             } catch (error) {
-                mostrarErro("Link inválido. Peça para gerar novamente.");
+                mostrarErro("Link inválido ou expirado.");
                 console.error(error);
             }
         }
 
         function mostrarErro(msg) {
-            const box = document.getElementById('error-box');
+            const box = document.getElementById('error-msg');
             box.innerText = msg;
-            box.style.display = 'block';
+            box.style.display = "block";
         }
 
-        // 2. Iniciar Scanner
+        function tentarIniciarNovamente() {
+            iniciarScanner();
+        }
+
+        // --- LÓGICA DO SCANNER OTIMIZADA PARA IOS ---
         function iniciarScanner() {
             mudarTela('screen-scan');
             passoAtual = 0;
             atualizarInstrucao();
 
+            // Configuração específica para evitar erros no Safari/iOS
             html5QrcodeScanner = new Html5Qrcode("reader");
+
+            // Define o tamanho da caixa de leitura baseado na largura da tela
+            // No iPhone, evita que a caixa seja maior que o vídeo
+            const width = window.innerWidth > 400 ? 300 : 250;
             
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            const config = { 
+                fps: 10, 
+                qrbox: { width: width, height: width },
+                // IMPORTANTE: Não use aspectRatio fixo no iOS, deixe a câmera decidir
+            };
             
-            html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess)
+            const cameraConfig = { 
+                facingMode: "environment" 
+            };
+
+            html5QrcodeScanner.start(cameraConfig, config, onScanSuccess, onScanError)
             .catch(err => {
-                alert("Erro ao abrir câmera. Verifique as permissões.");
+                console.error("Erro Câmera:", err);
+                mudarTela('screen-loading');
+                mostrarErro("Não foi possível acessar a câmera. Verifique as permissões do navegador.");
+                // Mostra botão manual caso o navegador tenha bloqueado o autoplay
+                document.getElementById('btn-manual-start').style.display = 'block';
             });
         }
 
-        // 3. Atualizar UI
-        function atualizarInstrucao() {
-            const labelMap = {
-                'extra': 'CÓD. EXTRA',
-                'comercial': 'CÓD. COMERCIAL',
-                'popular': 'CÓD. POPULAR'
-            };
-            document.getElementById('target-name').innerText = labelMap[ordemChecagem[passoAtual]];
+        function onScanError(errorMessage) {
+            // Ignora erros de "não encontrou código" para não poluir o console
         }
 
-        // 4. Lógica de Validação
-        function onScanSuccess(decodedText, decodedResult) {
+        function atualizarInstrucao() {
+            const labelMap = { 'extra': 'EXTRA', 'comercial': 'COMERCIAL', 'popular': 'POPULAR' };
+            const atual = labelMap[ordemChecagem[passoAtual]];
+            document.getElementById('target-name').innerText = atual;
+        }
+
+        function onScanSuccess(decodedText) {
             const tipoAtual = ordemChecagem[passoAtual];
             const codigoEsperado = dadosEsperados[tipoAtual];
 
             if (decodedText === codigoEsperado) {
-                alert(`✅ ${tipoAtual.toUpperCase()} Confirmado!`);
+                if (navigator.vibrate) navigator.vibrate(100);
+                
                 passoAtual++;
-
                 if (passoAtual >= 3) {
                     finalizarConferencia();
                 } else {
@@ -148,57 +324,101 @@
                     html5QrcodeScanner.pause();
                     setTimeout(() => html5QrcodeScanner.resume(), 1000);
                 }
-            } else {
-                console.log(`Lido: ${decodedText} | Esperado: ${codigoEsperado}`);
-                document.getElementById('feedback-msg').innerText = "❌ Código incorreto! Tente novamente.";
-                document.getElementById('feedback-msg').style.color = "red";
-                // Reseta mensagem após 2s
-                setTimeout(() => {
-                    document.getElementById('feedback-msg').innerText = "Aponte a câmera para o código de barras.";
-                    document.getElementById('feedback-msg').style.color = "#666";
-                }, 2000);
             }
         }
 
-        // 5. Gerar Relatório
         function finalizarConferencia() {
             if(html5QrcodeScanner) {
                 html5QrcodeScanner.stop().then(() => {
+                    salvarNoHistorico();
                     mudarTela('screen-success');
-                    gerarRelatorioHtml();
-                }).catch(err => console.error(err));
+                    renderizarRelatorioFinal();
+                }).catch(err => {
+                    console.error("Erro ao parar scanner", err);
+                    mudarTela('screen-success'); // Força ida para o sucesso mesmo se der erro no stop
+                    renderizarRelatorioFinal();
+                });
             }
         }
 
-        function gerarRelatorioHtml() {
+        function renderizarRelatorioFinal() {
             const html = `
-                <div class="report-item">
-                    <div class="report-label">Data Criação</div>
-                    <div class="report-value">${dadosEsperados.data}</div>
-                </div>
-                <div class="report-item">
-                    <div class="report-label">Extra</div>
-                    <div class="report-value">${dadosEsperados.extra}</div>
-                </div>
-                <div class="report-item">
-                    <div class="report-label">Comercial</div>
-                    <div class="report-value">${dadosEsperados.comercial}</div>
-                </div>
-                <div class="report-item">
-                    <div class="report-label">Popular</div>
-                    <div class="report-value">${dadosEsperados.popular}</div>
-                </div>
-                <div class="report-item" style="border:none; margin-top:20px;">
-                    <div class="report-label">Status</div>
-                    <div class="report-value">AUDITADO EM ${new Date().toLocaleTimeString()}</div>
-                </div>
+                <div class="report-row"><span class="lbl">Extra</span> <span class="val">${dadosEsperados.extra}</span></div>
+                <div class="report-row"><span class="lbl">Comercial</span> <span class="val">${dadosEsperados.comercial}</span></div>
+                <div class="report-row"><span class="lbl">Popular</span> <span class="val">${dadosEsperados.popular}</span></div>
+                <div class="report-row" style="margin-top:10px"><span class="lbl">Status</span> <span class="val" style="color:var(--success)">AUDITADO ✔</span></div>
             `;
             document.getElementById('report-content').innerHTML = html;
         }
 
+        // --- GERENCIAMENTO DE TELAS ---
         function mudarTela(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+        }
+
+        // --- SISTEMA DE HISTÓRICO ---
+        function salvarNoHistorico() {
+            const registro = {
+                dataAuditada: new Date().toLocaleString(),
+                dados: dadosEsperados
+            };
+
+            let historico = JSON.parse(localStorage.getItem('checklist_history') || '[]');
+            historico.unshift(registro);
+            if (historico.length > 20) historico = historico.slice(0, 20);
+            localStorage.setItem('checklist_history', JSON.stringify(historico));
+        }
+
+        function toggleHistory() {
+            const view = document.getElementById('history-view');
+            const isHidden = view.style.display === 'none' || view.style.display === '';
+            
+            if (isHidden) {
+                renderizarHistorico();
+                view.style.display = 'block';
+            } else {
+                view.style.display = 'none';
+            }
+        }
+
+        function renderizarHistorico() {
+            const historico = JSON.parse(localStorage.getItem('checklist_history') || '[]');
+            const listaDiv = document.getElementById('history-list');
+            const emptyMsg = document.getElementById('empty-history');
+            
+            listaDiv.innerHTML = '';
+
+            if (historico.length === 0) {
+                emptyMsg.style.display = 'block';
+                return;
+            } else {
+                emptyMsg.style.display = 'none';
+            }
+
+            historico.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+                    <div class="history-header">
+                        <span>📅 ${item.dataAuditada}</span>
+                        <span class="badge">OK</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: #374151;">
+                        <strong>E:</strong> ${item.dados.extra} | 
+                        <strong>C:</strong> ${item.dados.comercial} | 
+                        <strong>P:</strong> ${item.dados.popular}
+                    </div>
+                `;
+                listaDiv.appendChild(div);
+            });
+        }
+
+        function limparHistorico() {
+            if(confirm("Apagar histórico?")) {
+                localStorage.removeItem('checklist_history');
+                renderizarHistorico();
+            }
         }
     </script>
 </body>
