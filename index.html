@@ -4,19 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Conferência Pro</title>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     
     <style>
         :root {
             --primary: #2563eb;
             --success: #10b981;
+            --error: #ef4444;
             --bg: #f3f4f6;
             --card: #ffffff;
             --text-main: #1f2937;
             --text-sec: #6b7280;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -41,11 +44,9 @@
         .active { display: flex; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        .card { background: var(--card); padding: 25px; border-radius: 16px; box-shadow: var(--shadow); width: 100%; max-width: 400px; text-align: center; }
-        h2 { color: var(--text-main); margin: 0 0 10px 0; font-size: 1.5rem; }
-        p { color: var(--text-sec); margin-bottom: 20px; line-height: 1.5; }
-
-        /* Scanner */
+        .card { background: var(--card); padding: 25px; border-radius: 16px; box-shadow: var(--shadow); width: 100%; max-width: 400px; text-align: center; position: relative; }
+        
+        /* Scanner Area */
         #scanner-wrapper {
             width: 100%; max-width: 400px; border-radius: 16px; overflow: hidden; position: relative;
             box-shadow: 0 10px 25px rgba(0,0,0,0.15); background: #000; min-height: 300px; 
@@ -58,20 +59,25 @@
             width: 70%; padding-bottom: 70%; border: 2px solid rgba(255,255,255,0.7);
             border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); z-index: 10; pointer-events: none;
         }
-        .scan-label {
-            position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; color: white;
-            font-weight: 600; font-size: 1.1rem; text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 20;
+        
+        /* Feedback Message (Toast) */
+        #feedback-toast {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            padding: 12px 24px; border-radius: 50px; color: white; font-weight: bold;
+            z-index: 50; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            white-space: nowrap; font-size: 1rem;
         }
+        .toast-error { background-color: var(--error); }
+        .toast-success { background-color: var(--success); }
 
         .btn-action { background: var(--primary); color: white; padding: 16px 32px; border-radius: 12px; font-weight: 600; font-size: 1rem; border: none; width: 100%; cursor: pointer; transition: transform 0.1s; margin-top: 15px; }
-        .btn-action:active { transform: scale(0.98); }
+        .btn-whatsapp { background: #25d366; }
         .btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
 
-        /* Relatório Visual */
+        /* Relatório */
         .product-header { margin-bottom: 15px; border-bottom: 2px dashed #eee; padding-bottom: 15px; }
         .product-name { font-size: 1.3rem; font-weight: 800; color: var(--text-main); display: block; margin-bottom: 5px; }
         .product-lote { font-size: 0.9rem; color: var(--text-sec); background: #eee; padding: 2px 8px; border-radius: 4px; }
-
         .report-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
         .report-row:last-child { border-bottom: none; }
         .lbl { font-size: 0.85rem; color: var(--text-sec); }
@@ -80,9 +86,6 @@
         /* Histórico */
         #history-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 200; padding: 20px; overflow-y: auto; display: none; }
         .history-item { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-left: 5px solid var(--success); }
-        .history-prod { font-weight: 700; font-size: 1rem; margin-bottom: 5px; color: var(--text-main); }
-        .history-meta { display: flex; justify-content: space-between; font-size: 0.8rem; color: #888; margin-bottom: 8px; }
-        
         .check-icon { width: 80px; height: 80px; background: var(--success); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 40px; margin: 0 auto 20px; box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3); }
         .error-box { background: #fee2e2; color: #b91c1c; padding: 15px; border-radius: 8px; font-size: 0.9rem; margin-top: 10px; display: none; }
     </style>
@@ -98,33 +101,44 @@
         <div id="screen-loading" class="screen active">
             <div class="card">
                 <div style="font-size: 3rem; margin-bottom: 15px;">📦</div>
-                <h2>Aguardando Dados</h2>
-                <p>Use o Gerador para criar um link com Produto e Lote.</p>
+                <h2>Carregando...</h2>
+                <p>Acesse pelo link gerado.</p>
                 <div id="error-msg" class="error-box"></div>
-                <button id="btn-manual-start" class="btn-action" style="display:none;" onclick="tentarIniciarNovamente()">Iniciar Câmera</button>
+                <button id="btn-manual-start" class="btn-action" style="display:none;" onclick="iniciarScanner()">Tentar Novamente</button>
             </div>
         </div>
 
         <div id="screen-scan" class="screen">
             <div style="width:100%; max-width:400px; margin-bottom:10px; text-align:left;">
                 <span id="scan-prod-name" style="font-weight:bold; color: var(--primary);">Produto...</span>
-                <span id="scan-lote" style="font-size:0.8rem; color:#666; float:right;">Lote...</span>
             </div>
             
             <div id="scanner-wrapper">
                 <div id="reader"></div>
                 <div class="scan-overlay"></div>
-                <div class="scan-label">Procurando: <span id="target-name" style="color: #ffd700">...</span></div>
+                <div id="feedback-toast"></div>
+                <div class="scan-label" style="position: absolute; bottom: 20px; left:0; right:0; text-align:center; color:white; z-index:20; text-shadow:0 2px 2px black;">
+                    Procurando: <span id="target-name" style="color: #ffd700; font-weight:bold;">...</span>
+                </div>
             </div>
             <p style="margin-top: 20px; font-size: 0.9rem;">Mantenha o código no quadrado.</p>
         </div>
 
         <div id="screen-success" class="screen">
-            <div class="card">
+            <div class="card" id="print-area">
                 <div class="check-icon">✓</div>
                 <h2>Conferido!</h2>
                 <div id="report-content" style="text-align: left; background: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;"></div>
-                <button class="btn-action btn-outline" onclick="location.href=location.pathname">Nova Conferência</button>
+                <div style="font-size: 0.7rem; color: #aaa; margin-top: 10px;">Auditado via CheckConfirm</div>
+            </div>
+
+            <div style="width: 100%; max-width: 400px; margin-top: 20px;">
+                <button class="btn-action btn-whatsapp" onclick="compartilharPrint()">
+                    📤 Enviar Print no WhatsApp
+                </button>
+                <button class="btn-action btn-outline" onclick="location.href=location.pathname">
+                    Nova Conferência
+                </button>
             </div>
         </div>
 
@@ -140,15 +154,22 @@
     </main>
 
     <script>
+        // --- ESTADOS ---
         let dadosEsperados = null;
         let html5QrcodeScanner = null;
         const ordemChecagem = ['extra', 'comercial', 'popular'];
         let passoAtual = 0;
+        let isPaused = false;
 
+        // --- INICIALIZAÇÃO ---
         window.onload = function() {
             const params = new URLSearchParams(window.location.search);
             const dadosCriptografados = params.get('data');
             if (dadosCriptografados) processarDadosUrl(dadosCriptografados);
+            else {
+                document.getElementById('error-msg').innerText = "Necessário link válido.";
+                document.getElementById('error-msg').style.display = 'block';
+            }
         };
 
         function processarDadosUrl(encryptedData) {
@@ -158,28 +179,29 @@
                 if (!textoOriginal) throw new Error("Erro decrypt");
                 dadosEsperados = JSON.parse(textoOriginal);
                 
-                // Preenche info na tela de scan também
                 document.getElementById('scan-prod-name').innerText = dadosEsperados.produto || 'Produto';
-                document.getElementById('scan-lote').innerText = 'Lote: ' + (dadosEsperados.lote || '-');
-                
                 iniciarScanner();
             } catch (error) {
-                document.getElementById('error-msg').innerText = "Link inválido.";
-                document.getElementById('error-msg').style.display = "block";
+                mostrarErroGeral("Link inválido ou expirado.");
             }
         }
 
+        // --- SCANNER ---
         function iniciarScanner() {
             mudarTela('screen-scan');
             passoAtual = 0;
             atualizarInstrucao();
+            
             html5QrcodeScanner = new Html5Qrcode("reader");
             const width = window.innerWidth > 400 ? 300 : 250;
-            html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: width, height: width } }, onScanSuccess)
-            .catch(err => {
-                mudarTela('screen-loading');
-                document.getElementById('error-msg').innerText = "Erro na câmera. Verifique permissões.";
-                document.getElementById('error-msg').style.display = "block";
+            
+            html5QrcodeScanner.start(
+                { facingMode: "environment" }, 
+                { fps: 10, qrbox: { width: width, height: width } }, 
+                onScanSuccess, 
+                onScanError // Callback de erro (opcional, mas útil para debug)
+            ).catch(err => {
+                mostrarErroGeral("ERRO DE LEITURA: Câmera inacessível.");
                 document.getElementById('btn-manual-start').style.display = 'block';
             });
         }
@@ -190,18 +212,60 @@
         }
 
         function onScanSuccess(decodedText) {
+            if (isPaused) return;
+
             const tipoAtual = ordemChecagem[passoAtual];
-            if (decodedText === dadosEsperados[tipoAtual]) {
+            const codigoEsperado = dadosEsperados[tipoAtual];
+
+            if (decodedText === codigoEsperado) {
+                // CÓDIGO CORRETO
                 if (navigator.vibrate) navigator.vibrate(100);
+                mostrarFeedback("Código Correto!", "success");
+                
                 passoAtual++;
+                pausarScanTemporario(1000); // Pausa para não ler o mesmo código 2x rápido
+
                 if (passoAtual >= 3) {
                     finalizarConferencia();
                 } else {
                     atualizarInstrucao();
-                    html5QrcodeScanner.pause();
-                    setTimeout(() => html5QrcodeScanner.resume(), 1000);
                 }
+
+            } else {
+                // CÓDIGO ERRADO
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]); // Vibrar 2x
+                mostrarFeedback("CÓDIGO ERRADO", "error");
+                pausarScanTemporario(2000); // Pausa maior no erro para ler a mensagem
             }
+        }
+
+        // Detecta erros técnicos da câmera
+        function onScanError(errorMessage) {
+            // Não vamos mostrar "Erro de Leitura" aqui porque isso dispara 
+            // 30 vezes por segundo enquanto a câmera procura um código.
+            // A mensagem "Código Errado" acima é a mais importante.
+        }
+
+        function pausarScanTemporario(ms) {
+            isPaused = true;
+            setTimeout(() => { isPaused = false; }, ms);
+        }
+
+        function mostrarFeedback(msg, tipo) {
+            const toast = document.getElementById('feedback-toast');
+            toast.innerText = msg;
+            toast.className = tipo === 'error' ? 'toast-error' : 'toast-success';
+            toast.style.display = 'block';
+            
+            // Some após 2 segundos
+            setTimeout(() => { toast.style.display = 'none'; }, 2000);
+        }
+
+        function mostrarErroGeral(msg) {
+            mudarTela('screen-loading');
+            const box = document.getElementById('error-msg');
+            box.innerText = msg;
+            box.style.display = 'block';
         }
 
         function finalizarConferencia() {
@@ -218,7 +282,7 @@
         }
 
         function renderizarRelatorioFinal() {
-            const prod = dadosEsperados.produto || 'Produto Desconhecido';
+            const prod = dadosEsperados.produto || 'Produto';
             const lote = dadosEsperados.lote || '-';
             
             const html = `
@@ -230,12 +294,58 @@
                 <div class="report-row"><span class="lbl">Comercial</span> <span class="val">${dadosEsperados.comercial}</span></div>
                 <div class="report-row"><span class="lbl">Popular</span> <span class="val">${dadosEsperados.popular}</span></div>
                 <div class="report-row" style="margin-top:15px; color:var(--success); font-weight:bold; justify-content:center;">
-                    AUDITADO COM SUCESSO
+                    AUDITADO ✔
                 </div>
             `;
             document.getElementById('report-content').innerHTML = html;
         }
 
+        // --- FUNÇÃO DE PRINT / COMPARTILHAR ---
+        async function compartilharPrint() {
+            const btn = document.querySelector('.btn-whatsapp');
+            const textoOriginal = btn.innerText;
+            btn.innerText = "Gerando imagem...";
+
+            try {
+                // 1. Tira print do cartão
+                const canvas = await html2canvas(document.getElementById('print-area'), {
+                    scale: 2, // Melhor qualidade
+                    backgroundColor: "#ffffff"
+                });
+
+                // 2. Converte para arquivo
+                canvas.toBlob(async (blob) => {
+                    const file = new File([blob], "conferencia.png", { type: "image/png" });
+
+                    // 3. Tenta usar o compartilhamento nativo do celular
+                    if (navigator.share) {
+                        try {
+                            await navigator.share({
+                                files: [file],
+                                title: 'Conferência',
+                                text: `Conferência de ${dadosEsperados.produto}`
+                            });
+                        } catch (err) {
+                            console.log("Usuário cancelou compartilhamento.");
+                        }
+                    } else {
+                        alert("Seu navegador não suporta compartilhamento direto de imagem. A imagem será baixada.");
+                        const link = document.createElement('a');
+                        link.download = 'conferencia.png';
+                        link.href = canvas.toDataURL();
+                        link.click();
+                    }
+                    btn.innerText = textoOriginal;
+                });
+
+            } catch (error) {
+                console.error(error);
+                alert("Erro ao gerar imagem.");
+                btn.innerText = textoOriginal;
+            }
+        }
+
+        // --- UTILITÁRIOS ---
         function mudarTela(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
@@ -251,12 +361,8 @@
 
         function toggleHistory() {
             const view = document.getElementById('history-view');
-            if (view.style.display === 'block') {
-                view.style.display = 'none';
-            } else {
-                renderizarHistorico();
-                view.style.display = 'block';
-            }
+            if(view.style.display === 'block') view.style.display = 'none';
+            else { renderizarHistorico(); view.style.display = 'block'; }
         }
 
         function renderizarHistorico() {
@@ -265,37 +371,25 @@
             const emptyMsg = document.getElementById('empty-history');
             
             listaDiv.innerHTML = '';
-            if (historico.length === 0) {
-                emptyMsg.style.display = 'block';
-                return;
-            }
+            if (historico.length === 0) { emptyMsg.style.display = 'block'; return; }
             emptyMsg.style.display = 'none';
 
             historico.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'history-item';
                 div.innerHTML = `
-                    <div class="history-meta">
-                        <span>📅 ${item.dataAuditada}</span>
-                        <span>Lote: ${item.dados.lote || '-'}</span>
+                    <div style="font-size:0.8rem; color:#888; display:flex; justify-content:space-between;">
+                        <span>${item.dataAuditada}</span>
+                        <span>L: ${item.dados.lote||'-'}</span>
                     </div>
-                    <div class="history-prod">${item.dados.produto || 'Produto'}</div>
-                    <div style="font-size: 0.85rem; color: #555; border-top:1px solid #eee; padding-top:5px; margin-top:5px;">
-                        E: ${item.dados.extra} <br> C: ${item.dados.comercial}
-                    </div>
+                    <div style="font-weight:bold; margin:5px 0;">${item.dados.produto||'Produto'}</div>
                 `;
                 listaDiv.appendChild(div);
             });
         }
-
-        function limparHistorico() {
-            if(confirm("Apagar histórico?")) {
-                localStorage.removeItem('checklist_history_v2');
-                renderizarHistorico();
-            }
+        function limparHistorico() { 
+            if(confirm("Limpar histórico?")) { localStorage.removeItem('checklist_history_v2'); renderizarHistorico(); } 
         }
-        
-        function tentarIniciarNovamente() { iniciarScanner(); }
     </script>
 </body>
 </html>
