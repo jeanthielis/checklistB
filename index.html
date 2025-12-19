@@ -18,14 +18,13 @@
         h2 { color: #333; margin-bottom: 20px; }
         p { color: #666; font-size: 1.1em; }
         
-        /* Botões e Inputs */
-        .btn-upload { background: #007bff; color: white; padding: 15px 30px; border-radius: 50px; font-weight: bold; cursor: pointer; display: inline-block; margin-top: 20px; }
-        input[type="file"] { display: none; }
+        /* Botões */
+        .btn-action { background: #007bff; color: white; padding: 15px 30px; border-radius: 50px; font-weight: bold; cursor: pointer; display: inline-block; margin-top: 20px; border:none; text-decoration: none;}
 
         /* Área da Câmera */
         #reader { width: 100%; max-width: 500px; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         .status-bar { background: #333; color: #fff; width: 100%; padding: 15px; text-align: center; font-size: 1.2em; font-weight: bold; position: fixed; top: 0; left: 0; z-index: 10; }
-        .current-target { color: #ffd700; } /* Dourado para destaque */
+        .current-target { color: #ffd700; } 
 
         /* Tela de Sucesso */
         #screen-success { background-color: #2ecc71; color: white; }
@@ -34,18 +33,17 @@
         .report-item { margin: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; }
         .report-label { font-size: 0.8em; opacity: 0.8; }
         .report-value { font-size: 1.2em; font-weight: bold; }
+        
+        .error-msg { color: red; background: #fee; padding: 10px; border-radius: 5px; display: none; }
 
     </style>
 </head>
 <body>
 
-    <div id="screen-upload" class="screen active">
-        <h2>Conferência de Produto</h2>
-        <p>Carregue o arquivo recebido para iniciar a auditoria.</p>
-        <label class="btn-upload">
-            Selecionar Arquivo .check
-            <input type="file" id="fileInput" accept=".check, .txt" onchange="processarArquivo(this)">
-        </label>
+    <div id="screen-loading" class="screen active">
+        <h2>Aguardando Dados...</h2>
+        <p>Acesse este sistema através do link gerado pelo aplicativo de inserção.</p>
+        <div id="error-box" class="error-msg"></div>
     </div>
 
     <div id="screen-scan" class="screen" style="justify-content: flex-start; padding-top: 60px;">
@@ -61,10 +59,9 @@
         <h2>CONFERÊNCIA OK</h2>
         <p>Todos os códigos foram validados.</p>
         
-        <div class="report-card" id="report-content">
-            </div>
+        <div class="report-card" id="report-content"></div>
         
-        <button class="btn-upload" style="background: white; color: #2ecc71; margin-top: 30px;" onclick="location.reload()">Nova Conferência</button>
+        <button class="btn-action" style="background: white; color: #2ecc71; margin-top: 30px;" onclick="location.href=location.pathname">Nova Conferência</button>
     </div>
 
     <script>
@@ -74,28 +71,39 @@
         const ordemChecagem = ['extra', 'comercial', 'popular'];
         let passoAtual = 0;
 
-        // 1. Processar Arquivo
-        function processarArquivo(input) {
-            const file = input.files[0];
-            if (!file) return;
+        // Ao carregar a página, verifica se há dados na URL
+        window.onload = function() {
+            const params = new URLSearchParams(window.location.search);
+            const dadosCriptografados = params.get('data');
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    // Tenta descriptografar
-                    const bytes = CryptoJS.AES.decrypt(e.target.result, 'chave-mestra-123');
-                    const textoOriginal = bytes.toString(CryptoJS.enc.Utf8);
-                    
-                    if (!textoOriginal) throw new Error("Senha incorreta ou arquivo inválido");
-                    
-                    dadosEsperados = JSON.parse(textoOriginal);
-                    iniciarScanner();
-                } catch (error) {
-                    alert("Erro ao ler arquivo: Certifique-se que é um arquivo válido gerado pelo sistema.");
-                    console.error(error);
-                }
-            };
-            reader.readAsText(file);
+            if (dadosCriptografados) {
+                processarDadosUrl(dadosCriptografados);
+            }
+        };
+
+        // 1. Processar Dados da URL
+        function processarDadosUrl(encryptedData) {
+            try {
+                // Decodifica URL e Descriptografa
+                // Importante: decodeURIComponent é necessário pois a URL transforma caracteres como '+'
+                const decryptedBytes = CryptoJS.AES.decrypt(decodeURIComponent(encryptedData), 'chave-mestra-123');
+                const textoOriginal = decryptedBytes.toString(CryptoJS.enc.Utf8);
+                
+                if (!textoOriginal) throw new Error("Senha incorreta ou link corrompido");
+                
+                dadosEsperados = JSON.parse(textoOriginal);
+                iniciarScanner();
+
+            } catch (error) {
+                mostrarErro("Link inválido. Peça para gerar novamente.");
+                console.error(error);
+            }
+        }
+
+        function mostrarErro(msg) {
+            const box = document.getElementById('error-box');
+            box.innerText = msg;
+            box.style.display = 'block';
         }
 
         // 2. Iniciar Scanner
@@ -108,14 +116,13 @@
             
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
             
-            // Tenta usar câmera traseira ('environment')
             html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess)
             .catch(err => {
-                alert("Erro ao abrir câmera. Dê permissão ao navegador.");
+                alert("Erro ao abrir câmera. Verifique as permissões.");
             });
         }
 
-        // 3. Atualizar UI para dizer o que estamos procurando
+        // 3. Atualizar UI
         function atualizarInstrucao() {
             const labelMap = {
                 'extra': 'CÓD. EXTRA',
@@ -125,13 +132,12 @@
             document.getElementById('target-name').innerText = labelMap[ordemChecagem[passoAtual]];
         }
 
-        // 4. Lógica de Validação ao Ler Código
+        // 4. Lógica de Validação
         function onScanSuccess(decodedText, decodedResult) {
-            const tipoAtual = ordemChecagem[passoAtual]; // ex: 'extra'
+            const tipoAtual = ordemChecagem[passoAtual];
             const codigoEsperado = dadosEsperados[tipoAtual];
 
             if (decodedText === codigoEsperado) {
-                // SUCESSO NO PASSO
                 alert(`✅ ${tipoAtual.toUpperCase()} Confirmado!`);
                 passoAtual++;
 
@@ -139,20 +145,22 @@
                     finalizarConferencia();
                 } else {
                     atualizarInstrucao();
-                    // Pequena pausa para o usuário não ler o mesmo código duas vezes sem querer
                     html5QrcodeScanner.pause();
                     setTimeout(() => html5QrcodeScanner.resume(), 1000);
                 }
             } else {
-                // CÓDIGO ERRADO
                 console.log(`Lido: ${decodedText} | Esperado: ${codigoEsperado}`);
-                // Opcional: Dar feedback visual de erro, mas cuidado para não travar a operação
                 document.getElementById('feedback-msg').innerText = "❌ Código incorreto! Tente novamente.";
                 document.getElementById('feedback-msg').style.color = "red";
+                // Reseta mensagem após 2s
+                setTimeout(() => {
+                    document.getElementById('feedback-msg').innerText = "Aponte a câmera para o código de barras.";
+                    document.getElementById('feedback-msg').style.color = "#666";
+                }, 2000);
             }
         }
 
-        // 5. Gerar Relatório Final
+        // 5. Gerar Relatório
         function finalizarConferencia() {
             if(html5QrcodeScanner) {
                 html5QrcodeScanner.stop().then(() => {
@@ -188,7 +196,6 @@
             document.getElementById('report-content').innerHTML = html;
         }
 
-        // Utilitário para trocar de tela
         function mudarTela(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
