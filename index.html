@@ -3,157 +3,195 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conferência</title>
+    <title>Conferência de Checklist</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
     <style>
-        body { font-family: sans-serif; margin: 0; background: #222; color: white; display: flex; flex-direction: column; height: 100vh; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; }
         
-        /* Telas */
-        .screen { display: none; height: 100%; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+        /* Telas (Estados) */
+        .screen { display: none; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center; }
         .active { display: flex; }
 
-        /* Scanner */
-        #reader { width: 100%; max-width: 500px; border-radius: 12px; overflow: hidden; background: #000; }
+        /* Estilos Gerais */
+        h2 { color: #333; margin-bottom: 20px; }
+        p { color: #666; font-size: 1.1em; }
         
-        /* Instruções */
-        .status-header { position: fixed; top: 0; width: 100%; background: rgba(0,0,0,0.8); padding: 20px; font-size: 1.2rem; z-index: 10; }
-        .target { color: #f1c40f; font-weight: bold; font-size: 1.5rem; display: block; margin-top: 5px; }
+        /* Botões e Inputs */
+        .btn-upload { background: #007bff; color: white; padding: 15px 30px; border-radius: 50px; font-weight: bold; cursor: pointer; display: inline-block; margin-top: 20px; }
+        input[type="file"] { display: none; }
 
-        /* Sucesso */
-        .success-bg { background: #27ae60; }
-        .card-report { background: white; color: #333; padding: 20px; border-radius: 10px; width: 100%; max-width: 350px; text-align: left; margin-top: 20px; }
-        .item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; }
-        .btn-zap { background: #25d366; color: white; border: none; padding: 15px; width: 100%; border-radius: 50px; font-weight: bold; font-size: 16px; margin-top: 20px; cursor: pointer; text-decoration: none; display: block; text-align: center; }
+        /* Área da Câmera */
+        #reader { width: 100%; max-width: 500px; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .status-bar { background: #333; color: #fff; width: 100%; padding: 15px; text-align: center; font-size: 1.2em; font-weight: bold; position: fixed; top: 0; left: 0; z-index: 10; }
+        .current-target { color: #ffd700; } /* Dourado para destaque */
+
+        /* Tela de Sucesso */
+        #screen-success { background-color: #2ecc71; color: white; }
+        #screen-success h1 { font-size: 3em; margin: 0; }
+        .report-card { background: rgba(255,255,255,0.2); padding: 20px; border-radius: 10px; margin-top: 20px; text-align: left; width: 100%; max-width: 400px; }
+        .report-item { margin: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; }
+        .report-label { font-size: 0.8em; opacity: 0.8; }
+        .report-value { font-size: 1.2em; font-weight: bold; }
+
     </style>
 </head>
 <body>
 
-    <div id="screen-wait" class="screen active">
-        <h2>Aguardando Link...</h2>
-        <p>Abra este sistema clicando no link enviado pelo WhatsApp.</p>
+    <div id="screen-upload" class="screen active">
+        <h2>Conferência de Produto</h2>
+        <p>Carregue o arquivo recebido para iniciar a auditoria.</p>
+        <label class="btn-upload">
+            Selecionar Arquivo .check
+            <input type="file" id="fileInput" accept=".check, .txt" onchange="processarArquivo(this)">
+        </label>
     </div>
 
-    <div id="screen-scan" class="screen" style="justify-content: flex-start; padding-top: 100px;">
-        <div class="status-header">
-            PROCURANDO:
-            <span id="target-label" class="target">CARREGANDO...</span>
+    <div id="screen-scan" class="screen" style="justify-content: flex-start; padding-top: 60px;">
+        <div class="status-bar">
+            Procurando: <span id="target-name" class="current-target">...</span>
         </div>
         <div id="reader"></div>
-        <p style="margin-top:20px; color: #aaa;">Aponte para o código de barras</p>
+        <p id="feedback-msg" style="margin-top: 20px;">Aponte a câmera para o código de barras.</p>
     </div>
 
-    <div id="screen-result" class="screen success-bg">
-        <h1 style="font-size: 4rem; margin: 0;">✔</h1>
+    <div id="screen-success" class="screen">
+        <h1>✔</h1>
         <h2>CONFERÊNCIA OK</h2>
-        <div class="card-report" id="report-body"></div>
-        <div id="btn-container" style="width: 100%; max-width: 350px;"></div>
+        <p>Todos os códigos foram validados.</p>
+        
+        <div class="report-card" id="report-content">
+            </div>
+        
+        <button class="btn-upload" style="background: white; color: #2ecc71; margin-top: 30px;" onclick="location.reload()">Nova Conferência</button>
     </div>
 
     <script>
-        let dadosChecklist = null;
-        let scanner = null;
-        // Ordem exata da conferência
-        const etapas = [
-            { id: 'e', label: 'CÓD. EXTRA' },
-            { id: 'c', label: 'CÓD. COMERCIAL' },
-            { id: 'p', label: 'CÓD. POPULAR' }
-        ];
-        let etapaAtual = 0;
+        // Variáveis de Estado
+        let dadosEsperados = null;
+        let html5QrcodeScanner = null;
+        const ordemChecagem = ['extra', 'comercial', 'popular'];
+        let passoAtual = 0;
 
-        // 1. Ao carregar, verifica o Link
-        window.onload = function() {
-            const params = new URLSearchParams(window.location.search);
-            const dadosCripto = params.get('dados');
+        // 1. Processar Arquivo
+        function processarArquivo(input) {
+            const file = input.files[0];
+            if (!file) return;
 
-            if(dadosCripto) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
                 try {
-                    const bytes = CryptoJS.AES.decrypt(decodeURIComponent(dadosCripto), 'minha-chave-secreta-123');
-                    const texto = bytes.toString(CryptoJS.enc.Utf8);
-                    if(!texto) throw new Error("Senha inválida");
+                    // Tenta descriptografar
+                    const bytes = CryptoJS.AES.decrypt(e.target.result, 'chave-mestra-123');
+                    const textoOriginal = bytes.toString(CryptoJS.enc.Utf8);
                     
-                    dadosChecklist = JSON.parse(texto);
-                    iniciarConferencia();
-                } catch(e) {
-                    alert("Link inválido ou corrompido.");
+                    if (!textoOriginal) throw new Error("Senha incorreta ou arquivo inválido");
+                    
+                    dadosEsperados = JSON.parse(textoOriginal);
+                    iniciarScanner();
+                } catch (error) {
+                    alert("Erro ao ler arquivo: Certifique-se que é um arquivo válido gerado pelo sistema.");
+                    console.error(error);
                 }
-            }
-        };
+            };
+            reader.readAsText(file);
+        }
 
-        function iniciarConferencia() {
-            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-            document.getElementById('screen-scan').classList.add('active');
+        // 2. Iniciar Scanner
+        function iniciarScanner() {
+            mudarTela('screen-scan');
+            passoAtual = 0;
+            atualizarInstrucao();
+
+            html5QrcodeScanner = new Html5Qrcode("reader");
             
-            etapaAtual = 0;
-            atualizarTitulo();
-
-            // Configura Scanner
-            scanner = new Html5Qrcode("reader");
-            scanner.start(
-                { facingMode: "environment" }, 
-                { fps: 10, qrbox: 250 },
-                onScan
-            ).catch(err => {
-                alert("Erro ao abrir câmera: " + err);
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            // Tenta usar câmera traseira ('environment')
+            html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess)
+            .catch(err => {
+                alert("Erro ao abrir câmera. Dê permissão ao navegador.");
             });
         }
 
-        function atualizarTitulo() {
-            const info = etapas[etapaAtual];
-            document.getElementById('target-label').innerText = info.label;
+        // 3. Atualizar UI para dizer o que estamos procurando
+        function atualizarInstrucao() {
+            const labelMap = {
+                'extra': 'CÓD. EXTRA',
+                'comercial': 'CÓD. COMERCIAL',
+                'popular': 'CÓD. POPULAR'
+            };
+            document.getElementById('target-name').innerText = labelMap[ordemChecagem[passoAtual]];
         }
 
-        function onScan(lido) {
-            const keyAtual = etapas[etapaAtual].id; // 'e', 'c' ou 'p'
-            const esperado = dadosChecklist[keyAtual];
+        // 4. Lógica de Validação ao Ler Código
+        function onScanSuccess(decodedText, decodedResult) {
+            const tipoAtual = ordemChecagem[passoAtual]; // ex: 'extra'
+            const codigoEsperado = dadosEsperados[tipoAtual];
 
-            if(lido === esperado) {
-                // Sucesso na leitura
-                alert(`✅ ${etapas[etapaAtual].label} OK!`);
-                etapaAtual++;
+            if (decodedText === codigoEsperado) {
+                // SUCESSO NO PASSO
+                alert(`✅ ${tipoAtual.toUpperCase()} Confirmado!`);
+                passoAtual++;
 
-                if(etapaAtual >= 3) {
-                    finalizar();
+                if (passoAtual >= 3) {
+                    finalizarConferencia();
                 } else {
-                    atualizarTitulo();
-                    // Pausa rápida para não ler duplicado
-                    scanner.pause();
-                    setTimeout(() => scanner.resume(), 1500);
+                    atualizarInstrucao();
+                    // Pequena pausa para o usuário não ler o mesmo código duas vezes sem querer
+                    html5QrcodeScanner.pause();
+                    setTimeout(() => html5QrcodeScanner.resume(), 1000);
                 }
             } else {
-                console.log(`Errado. Lido: ${lido} | Esperado: ${esperado}`);
+                // CÓDIGO ERRADO
+                console.log(`Lido: ${decodedText} | Esperado: ${codigoEsperado}`);
+                // Opcional: Dar feedback visual de erro, mas cuidado para não travar a operação
+                document.getElementById('feedback-msg').innerText = "❌ Código incorreto! Tente novamente.";
+                document.getElementById('feedback-msg').style.color = "red";
             }
         }
 
-        function finalizar() {
-            scanner.stop().then(() => {
-                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-                document.getElementById('screen-result').classList.add('active');
-                
-                // Gerar Relatório Visual
-                const html = `
-                    <div class="item"><span>Data:</span> <b>${dadosChecklist.d}</b></div>
-                    <div class="item"><span>Extra:</span> <b>${dadosChecklist.e}</b></div>
-                    <div class="item"><span>Comercial:</span> <b>${dadosChecklist.c}</b></div>
-                    <div class="item"><span>Popular:</span> <b>${dadosChecklist.p}</b></div>
-                `;
-                document.getElementById('report-body').innerHTML = html;
+        // 5. Gerar Relatório Final
+        function finalizarConferencia() {
+            if(html5QrcodeScanner) {
+                html5QrcodeScanner.stop().then(() => {
+                    mudarTela('screen-success');
+                    gerarRelatorioHtml();
+                }).catch(err => console.error(err));
+            }
+        }
 
-                // Gerar Botão Zap
-                const msgZap = `✅ *CONFERÊNCIA VALIDADA*%0A` +
-                               `📅 ${dadosChecklist.d}%0A` +
-                               `------------------%0A` +
-                               `📦 Extra: OK%0A📦 Comercial: OK%0A📦 Popular: OK%0A` +
-                               `------------------%0A` +
-                               `👮 Supervisor Validado`;
-                
-                document.getElementById('btn-container').innerHTML = `
-                    <a href="https://wa.me/?text=${msgZap}" class="btn-zap">
-                        📲 Enviar Confirmação
-                    </a>
-                    <button onclick="location.href=location.href" style="background:none; border:none; color:white; margin-top:15px; text-decoration:underline;">Reiniciar</button>
-                `;
-            });
+        function gerarRelatorioHtml() {
+            const html = `
+                <div class="report-item">
+                    <div class="report-label">Data Criação</div>
+                    <div class="report-value">${dadosEsperados.data}</div>
+                </div>
+                <div class="report-item">
+                    <div class="report-label">Extra</div>
+                    <div class="report-value">${dadosEsperados.extra}</div>
+                </div>
+                <div class="report-item">
+                    <div class="report-label">Comercial</div>
+                    <div class="report-value">${dadosEsperados.comercial}</div>
+                </div>
+                <div class="report-item">
+                    <div class="report-label">Popular</div>
+                    <div class="report-value">${dadosEsperados.popular}</div>
+                </div>
+                <div class="report-item" style="border:none; margin-top:20px;">
+                    <div class="report-label">Status</div>
+                    <div class="report-value">AUDITADO EM ${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+            document.getElementById('report-content').innerHTML = html;
+        }
+
+        // Utilitário para trocar de tela
+        function mudarTela(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
         }
     </script>
 </body>
